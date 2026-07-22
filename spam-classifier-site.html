@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Every Email, Read Twice — A Spam Filter You Can Inspect</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#12141b;
+  --panel:#1c1f29;
+  --panel-2:#232734;
+  --paper:#f1ecde;
+  --paper-ink:#23201a;
+  --spam:#e8963c;
+  --spam-dim:#e8963c33;
+  --ham:#3fae8a;
+  --ham-dim:#3fae8a33;
+  --muted:#9096a6;
+  --hair:#2c303c;
+  --display: 'Fraunces', serif;
+  --body: 'Inter', -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0;
+  background:var(--ink);
+  color:#e7e5de;
+  font-family:var(--body);
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:inherit;}
+::selection{background:var(--spam-dim);}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px;}
+
+/* ---------- top nav ---------- */
+.nav{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:22px 0;
+  border-bottom:1px solid var(--hair);
+}
+.nav .mark{
+  font-family:var(--mono);font-size:13px;letter-spacing:.06em;
+  color:var(--muted);text-transform:uppercase;
+}
+.nav .mark b{color:#e7e5de;font-weight:600;}
+.nav .links{display:flex;gap:26px;font-family:var(--mono);font-size:13px;}
+.nav .links a{color:var(--muted);text-decoration:none;transition:color .15s;}
+.nav .links a:hover,.nav .links a:focus-visible{color:#e7e5de;}
+
+/* ---------- hero ---------- */
+.hero{padding:76px 0 40px;}
+.eyebrow{
+  font-family:var(--mono);font-size:12px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);
+  display:flex;align-items:center;gap:10px;margin-bottom:22px;
+}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--ham);box-shadow:0 0 0 3px var(--ham-dim);}
+h1{
+  font-family:var(--display);
+  font-weight:500;
+  font-size:clamp(38px,6vw,64px);
+  line-height:1.04;
+  letter-spacing:-.01em;
+  margin:0 0 22px;
+  max-width:15ch;
+}
+h1 em{font-style:italic;color:var(--spam);}
+.sub{
+  font-size:18px;color:var(--muted);max-width:52ch;margin:0 0 8px;
+}
+.sub b{color:#e7e5de;font-weight:500;}
+
+/* ---------- scanner ---------- */
+.scanner{
+  margin-top:44px;
+  background:var(--paper);
+  color:var(--paper-ink);
+  border-radius:14px;
+  padding:30px;
+  box-shadow:0 30px 60px -20px rgba(0,0,0,.5);
+  position:relative;
+  transform:rotate(-.4deg);
+}
+.scanner::before{
+  content:"";
+  position:absolute;inset:10px -10px -10px 10px;
+  background:var(--panel-2);
+  border-radius:14px;
+  z-index:-1;
+  transform:rotate(.9deg);
+}
+.scanner-head{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:14px;font-family:var(--mono);font-size:12px;
+  letter-spacing:.08em;text-transform:uppercase;color:#6b6455;
+}
+textarea{
+  width:100%;min-height:130px;resize:vertical;
+  border:1.5px dashed #c9c0a4;border-radius:8px;
+  background:#fbf9f1;color:var(--paper-ink);
+  font-family:var(--body);font-size:15.5px;line-height:1.55;
+  padding:16px;outline:none;
+}
+textarea:focus-visible{border-color:var(--paper-ink);}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+.chip{
+  font-family:var(--mono);font-size:12px;
+  background:#e7e0cc;color:#5b5341;border:none;border-radius:20px;
+  padding:7px 13px;cursor:pointer;transition:background .15s, transform .1s;
+}
+.chip:hover{background:#dcd3b8;}
+.chip:active{transform:scale(.97);}
+.scan-row{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-top:20px;
+}
+.scan-btn{
+  font-family:var(--mono);font-size:14px;letter-spacing:.04em;
+  background:var(--paper-ink);color:var(--paper);
+  border:none;border-radius:8px;padding:13px 22px;cursor:pointer;
+  transition:transform .12s ease;
+}
+.scan-btn:hover{transform:translateY(-1px);}
+.scan-btn:active{transform:translateY(0);}
+.scan-btn:focus-visible{outline:3px solid var(--ham);outline-offset:2px;}
+.scan-hint{font-family:var(--mono);font-size:11px;color:#8a836e;}
+
+.result{
+  margin-top:22px;padding-top:22px;border-top:1.5px dashed #c9c0a4;
+  display:none;
+}
+.result.show{display:block;}
+.verdict-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.stamp{
+  font-family:var(--mono);font-weight:600;font-size:20px;
+  letter-spacing:.06em;padding:9px 18px;border-radius:6px;border:2.5px solid currentColor;
+  transform:rotate(-3deg);display:inline-block;
+}
+.stamp.spam{color:var(--spam);}
+.stamp.ham{color:var(--ham);}
+.meter-label{font-family:var(--mono);font-size:12px;color:#6b6455;}
+.meter{
+  flex:1;min-width:160px;height:8px;background:#e2dabf;border-radius:6px;overflow:hidden;
+}
+.meter-fill{height:100%;width:0%;border-radius:6px;transition:width .5s ease;}
+.annotated{
+  margin-top:18px;font-size:15px;line-height:1.7;color:#3a352a;
+}
+.annotated mark{
+  border-radius:3px;padding:0 2px;background:transparent;color:inherit;
+  box-shadow:inset 0 -2px 0 0 var(--mark-color, var(--spam));
+}
+.legend{display:flex;gap:18px;margin-top:14px;font-family:var(--mono);font-size:11px;color:#6b6455;}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+/* ---------- sections ---------- */
+section{padding:88px 0;border-top:1px solid var(--hair);}
+.kicker{
+  font-family:var(--mono);font-size:12px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:14px;
+}
+h2{
+  font-family:var(--display);font-weight:500;font-size:clamp(26px,3.6vw,36px);
+  margin:0 0 12px;letter-spacing:-.01em;
+}
+.section-sub{color:var(--muted);max-width:56ch;margin-bottom:52px;font-size:15.5px;}
+
+/* pipeline */
+.pipeline{display:flex;gap:0;flex-wrap:wrap;}
+.step{flex:1;min-width:220px;padding:24px 22px;background:var(--panel);border-radius:12px;margin-right:16px;margin-bottom:16px;}
+.step .num{font-family:var(--mono);color:var(--muted);font-size:12px;}
+.step h3{font-family:var(--body);font-weight:600;font-size:16px;margin:10px 0 8px;}
+.step p{color:var(--muted);font-size:14px;margin:0;}
+.step code{font-family:var(--mono);font-size:12.5px;background:var(--panel-2);padding:2px 6px;border-radius:4px;color:#dcd8cc;}
+
+/* evidence */
+.evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:700px){.evidence-grid{grid-template-columns:1fr;}}
+.ev-card{background:var(--panel);border-radius:12px;padding:26px;}
+.ev-card h3{
+  font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;
+  margin:0 0 18px;display:flex;align-items:center;gap:8px;
+}
+.ev-card.spam-card h3{color:var(--spam);}
+.ev-card.ham-card h3{color:var(--ham);}
+.tagset{display:flex;flex-wrap:wrap;gap:8px;}
+.tag{
+  font-family:var(--mono);font-size:12.5px;padding:6px 11px;border-radius:6px;
+  background:var(--panel-2);color:#dcd8cc;border:1px solid var(--hair);
+}
+.spam-card .tag{border-color:#e8963c44;}
+.ham-card .tag{border-color:#3fae8a44;}
+
+/* metrics */
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:700px){.metrics-grid{grid-template-columns:1fr;}}
+.metric-card{
+  background:var(--panel);border-radius:12px;padding:28px;
+}
+.metric-card .mname{font-family:var(--body);font-weight:600;font-size:17px;margin-bottom:2px;}
+.metric-card .mdesc{color:var(--muted);font-size:13px;margin-bottom:20px;}
+.mrow{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-top:1px solid var(--hair);}
+.mrow:first-of-type{border-top:none;}
+.mrow .mlabel{font-size:13px;color:var(--muted);}
+.mrow .mval{font-family:var(--mono);font-size:17px;color:#e7e5de;}
+.caption{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:18px;line-height:1.6;}
+
+/* footer */
+footer{padding:50px 0 70px;border-top:1px solid var(--hair);}
+footer .stack{
+  display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;
+}
+footer .stack span{
+  font-family:var(--mono);font-size:12px;color:var(--muted);
+  border:1px solid var(--hair);border-radius:20px;padding:6px 12px;
+}
+footer p{color:var(--muted);font-size:13px;max-width:60ch;}
+
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto;}
+  *{transition:none !important;animation:none !important;}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="nav">
+    <div class="mark">&lt;<b>inbox</b>·scan&gt;</div>
+    <div class="links">
+      <a href="#demo">Demo</a>
+      <a href="#how">Pipeline</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#metrics">Metrics</a>
+    </div>
+  </nav>
+
+  <section class="hero" style="border-top:none;padding-top:56px;">
+    <div class="eyebrow"><span class="dot"></span> Live model running in your browser</div>
+    <h1>Every email,<br><em>read twice.</em></h1>
+    <p class="sub">Once by you. Once by a <b>Naive Bayes classifier</b> trained on TF‑IDF text features — and below, you can watch exactly which words tip its verdict.</p>
+
+    <div class="scanner" id="demo">
+      <div class="scanner-head">
+        <span>Inbox scanner</span>
+        <span id="charcount">0 characters</span>
+      </div>
+      <textarea id="input" placeholder="Paste an email here, or try one of the samples below…"></textarea>
+      <div class="chips">
+        <button class="chip" data-sample="scam">Try a scam</button>
+        <button class="chip" data-sample="coworker">Try a coworker</button>
+        <button class="chip" data-sample="promo">Try a real promo</button>
+      </div>
+      <div class="scan-row">
+        <button class="scan-btn" id="scanBtn">Scan message →</button>
+        <span class="scan-hint">runs entirely client-side · no data leaves this page</span>
+      </div>
+
+      <div class="result" id="result">
+        <div class="verdict-row">
+          <span class="stamp" id="stamp">HAM</span>
+          <span class="meter-label" id="meterLabel">0% spam probability</span>
+          <div class="meter"><div class="meter-fill" id="meterFill"></div></div>
+        </div>
+        <div class="annotated" id="annotated"></div>
+        <div class="legend">
+          <span><i style="background:var(--spam)"></i> pushes toward spam</span>
+          <span><i style="background:var(--ham)"></i> pushes toward ham</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="kicker">01 · The pipeline</div>
+    <h2>Three steps between a raw email and a verdict</h2>
+    <p class="section-sub">Nothing here is hidden. The same three operations run whether you're scanning above or training on 800 emails from the command line.</p>
+    <div class="pipeline">
+      <div class="step">
+        <div class="num">01</div>
+        <h3>Clean</h3>
+        <p>Lowercase the text, collapse every URL to <code>URL</code> and every number to <code>NUM</code>, and strip punctuation — so <code>Click NOW!!!</code> and <code>click now</code> become the same signal.</p>
+      </div>
+      <div class="step">
+        <div class="num">02</div>
+        <h3>Vectorize</h3>
+        <p>A <code>TfidfVectorizer</code> turns the cleaned text into weighted word and word-pair frequencies — 693 features learned from the training set, unigrams and bigrams alike.</p>
+      </div>
+      <div class="step" style="margin-right:0;">
+        <div class="num">03</div>
+        <h3>Score</h3>
+        <p>A <code>MultinomialNB</code> classifier compares the log-probability of those features under "spam" vs. "ham" and returns whichever is more likely.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="evidence">
+    <div class="kicker">02 · The evidence</div>
+    <h2>What the model actually learned</h2>
+    <p class="section-sub">These aren't hand-picked keywords — they're the exact terms with the strongest log-probability gap between the two classes, pulled straight from the trained model's weights.</p>
+    <div class="evidence-grid">
+      <div class="ev-card spam-card">
+        <h3>⚑ Strongest spam signals</h3>
+        <div class="tagset" id="spamTags"></div>
+      </div>
+      <div class="ev-card ham-card">
+        <h3>✓ Strongest ham signals</h3>
+        <div class="tagset" id="hamTags"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="metrics">
+    <div class="kicker">03 · The scoreboard</div>
+    <h2>Naive Bayes vs. Linear SVM</h2>
+    <p class="section-sub">Both models trained on the same 693 TF-IDF features, evaluated on a held-out 20% test split (160 emails).</p>
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="mname">Multinomial Naive Bayes</div>
+        <div class="mdesc">Fast, interpretable, gives calibrated probabilities</div>
+        <div class="mrow"><span class="mlabel">Accuracy</span><span class="mval">100.0%</span></div>
+        <div class="mrow"><span class="mlabel">Precision</span><span class="mval">100.0%</span></div>
+        <div class="mrow"><span class="mlabel">Recall</span><span class="mval">100.0%</span></div>
+        <div class="mrow"><span class="mlabel">F1-score</span><span class="mval">1.000</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="mname">Linear SVM</div>
+        <div class="mdesc">Strong baseline for high-dimensional sparse text</div>
+        <div class="mrow"><span class="mlabel">Accuracy</span><span class="mval">100.0%</span></div>
+        <div class="mrow"><span class="mlabel">Precision</span><span class="mval">100.0%</span></div>
+        <div class="mrow"><span class="mlabel">Recall</span><span class="mval">100.0%</span></div>
+        <div class="mrow"><span class="mlabel">F1-score</span><span class="mval">1.000</span></div>
+      </div>
+    </div>
+    <p class="caption">Trained on a templated synthetic dataset (800 emails), which is why both models separate perfectly — real inboxes are messier. Swap in a genuine labeled dataset (e.g. SMS Spam Collection, Enron-Spam) to see more realistic numbers.</p>
+  </section>
+
+  <footer>
+    <div class="stack">
+      <span>Python</span><span>scikit-learn</span><span>TF-IDF</span><span>Naive Bayes</span><span>Linear SVM</span><span>joblib</span>
+    </div>
+    <p>The scanner above runs the actual exported model weights in JavaScript — same vocabulary, same TF-IDF math, same log-probabilities as the Python training pipeline. Nothing you type is sent anywhere.</p>
+  </footer>
+</div>
+
+<script id="model-data" type="application/json">{"vocab":{"hello":211,"project":427,"deadline":128,"moved":347,"friday":201,"plan":396,"accordingly":4,"thanks":570,"maria":301,"hello project":216,"project deadline":428,"deadline moved":129,"moved friday":348,"friday plan":202,"plan accordingly":397,"accordingly thanks":10,"thanks maria":575,"subscription":551,"limited":282,"time":582,"offer":369,"buy":76,"num":357,"questions":440,"asked":44,"click":96,"url":626,"subscription limited":556,"limited time":284,"time offer":583,"offer buy":370,"buy num":77,"num questions":365,"questions asked":441,"asked click":45,"click url":105,"act":14,"cheap":83,"meds":302,"discreet":136,"shipping":534,"prescription":415,"needed":349,"order":382,"expires":161,"act limited":16,"offer cheap":371,"cheap meds":84,"meds discreet":303,"discreet shipping":137,"shipping prescription":535,"prescription needed":416,"needed order":350,"order num":385,"num num":362,"num offer":363,"offer expires":373,"hey":222,"just":269,"following":178,"ll":287,"office":378,"monday":333,"reach":450,"alex":26,"urgent":618,"let":279,"know":274,"sam":497,"hey just":223,"just following":271,"following ll":181,"ll office":288,"office monday":379,"monday reach":336,"reach alex":451,"alex urgent":27,"urgent let":622,"let know":281,"know questions":276,"questions sam":446,"discussed":138,"meeting":304,"server":530,"maintenance":297,"scheduled":515,"tonight":592,"11pm":0,"expect":157,"brief":72,"downtime":142,"talk":559,"soon":540,"david":121,"discussed meeting":139,"meeting server":311,"server maintenance":531,"maintenance scheduled":298,"scheduled tonight":516,"tonight 11pm":593,"11pm expect":1,"expect brief":158,"brief downtime":73,"downtime talk":147,"talk soon":560,"soon david":541,"final":176,"notice":355,"regarding":454,"free":191,"gift":203,"card":78,"waiting":643,"enter":152,"credit":119,"verify":633,"final notice":177,"notice regarding":356,"regarding free":460,"free gift":195,"gift card":204,"card waiting":80,"waiting just":644,"just enter":270,"enter credit":153,"credit card":120,"card verify":79,"verify num":637,"claim":87,"package":387,"delivered":132,"reschedule":488,"pay":391,"fee":168,"spots":542,"available":65,"claim free":89,"free package":198,"package delivered":388,"delivered click":133,"click reschedule":103,"reschedule pay":490,"pay fee":392,"fee limited":169,"limited spots":283,"spots available":543,"available click":66,"hot":243,"singles":538,"area":42,"want":645,"earn":148,"week":663,"home":233,"experience":159,"required":484,"sign":536,"today":584,"hot singles":244,"singles area":539,"area want":43,"want earn":649,"earn num":149,"num week":367,"week home":666,"home experience":238,"experience required":160,"required sign":485,"sign today":537,"today limited":586,"account":11,"requires":486,"immediate":254,"action":17,"send":526,"bank":68,"details":134,"receive":452,"winnings":678,"hours":245,"urgent account":619,"account requires":12,"requires immediate":487,"immediate action":255,"action send":24,"send bank":527,"bank details":69,"details receive":135,"receive winnings":453,"winnings num":679,"num hours":360,"hours limited":247,"visit":641,"started":548,"subscription free":555,"verify visit":640,"visit url":642,"url started":627,"ve":630,"pre":413,"approved":30,"loan":290,"apply":28,"minutes":320,"ve pre":631,"pre approved":414,"approved loan":36,"loan num":291,"num apply":358,"apply minutes":29,"minutes num":323,"subscription earn":554,"quarterly":438,"report":480,"attached":51,"review":493,"hello quarterly":217,"quarterly report":439,"report attached":481,"attached review":60,"review let":495,"questions talk":447,"link":285,"identity":252,"prize":418,"reply":478,"yes":691,"confirm":113,"lose":292,"forever":190,"subscription click":553,"click link":100,"link verify":286,"verify identity":635,"identity claim":253,"claim prize":92,"prize reply":422,"reply yes":479,"yes confirm":692,"confirm lose":114,"lose offer":294,"offer forever":374,"regards":465,"priya":417,"following project":183,"accordingly regards":8,"regards priya":467,"congratulations":116,"selected":517,"congratulations selected":118,"selected send":524,"hours visit":251,"regarding click":456,"prize limited":420,"hi":224,"team":561,"updated":616,"budget":74,"spreadsheet":544,"q3":434,"planning":398,"hi team":231,"team attached":562,"attached updated":63,"updated budget":617,"budget spreadsheet":75,"spreadsheet q3":545,"q3 planning":435,"planning talk":403,"pounds":405,"weeks":672,"weird":674,"trick":601,"offer lose":377,"lose num":293,"num pounds":364,"pounds num":406,"num weeks":368,"weeks weird":673,"weird trick":675,"trick click":602,"click visit":106,"verify click":634,"suspended":557,"unless":603,"password":389,"immediately":256,"subscription account":552,"account suspended":13,"suspended unless":558,"unless confirm":604,"confirm password":115,"password immediately":390,"immediately click":257,"make":299,"working":689,"make num":300,"week working":671,"working home":690,"minutes limited":322,"want lose":653,"click num":101,"hello attached":212,"planning let":401,"dear":130,"winner":676,"won":680,"dear winner":131,"winner won":677,"today click":585,"selected account":518,"immediately visit":261,"want package":654,"fee num":170,"hello server":220,"downtime regards":146,"sending":528,"invoice":266,"process":425,"payment":393,"meeting thanks":312,"thanks sending":577,"sending invoice":529,"invoice ll":267,"ll process":289,"process payment":426,"payment week":395,"week thanks":670,"new":351,"message":314,"unsubscribe":605,"exclusive":154,"num new":361,"new message":352,"message account":315,"immediately unsubscribe":260,"unsubscribe available":606,"available exclusive":67,"exclusive offer":156,"want limited":652,"asked unsubscribe":49,"notes":353,"standup":546,"missed":326,"hi notes":227,"notes today":354,"today standup":589,"standup let":547,"know missed":275,"missed regards":330,"planning thanks":404,"best":70,"john":268,"downtime best":143,"best regards":71,"regards john":466,"prize visit":424,"sarah":498,"hi sarah":229,"sarah project":501,"accordingly let":7,"thanks attached":571,"thursday":580,"2pm":2,"instead":262,"wednesday":656,"cheers":85,"meeting reschedule":309,"reschedule meeting":489,"meeting thursday":313,"thursday 2pm":581,"2pm instead":3,"instead wednesday":263,"wednesday cheers":658,"cheers team":86,"free lose":197,"click reply":102,"quick":448,"update":607,"quick update":449,"update thanks":614,"week best":664,"meeting attached":305,"regarding limited":461,"client":107,"proposal":430,"kick":272,"thanks client":572,"client approved":108,"approved proposal":39,"proposal let":431,"let kick":280,"kick project":273,"project monday":429,"monday best":334,"good":205,"morning":339,"good morning":206,"morning ll":342,"urgent best":620,"payment num":394,"num approved":359,"approved package":38,"pushed":432,"latest":277,"code":109,"changes":81,"repository":482,"pr":407,"following ve":189,"ve pushed":632,"pushed latest":433,"latest code":278,"code changes":110,"changes repository":82,"repository review":483,"review pr":496,"accordingly talk":9,"attached thanks":62,"week regards":668,"free cheap":193,"document":140,"share":532,"feedback":174,"end":150,"day":122,"team review":568,"review attached":494,"attached document":54,"document share":141,"share feedback":533,"feedback end":175,"end day":151,"day best":123,"following reschedule":185,"wednesday let":659,"urgent cheers":621,"wednesday regards":660,"pr talk":411,"team quarterly":566,"questions regards":445,"following server":187,"questions cheers":443,"reminder":468,"day thanks":127,"hi reschedule":228,"fee unsubscribe":172,"great":207,"conference":111,"love":295,"stay":549,"touch":594,"hi great":225,"great meeting":208,"meeting conference":306,"conference love":112,"love stay":296,"stay touch":550,"touch best":595,"sarah server":504,"morning reschedule":344,"wednesday best":657,"day talk":126,"accordingly best":5,"update reschedule":613,"meeting project":308,"accordingly cheers":6,"attached reschedule":59,"wednesday talk":661,"investment":264,"opportunity":380,"guarantees":209,"returns":491,"fast":162,"free exclusive":194,"exclusive investment":155,"investment opportunity":265,"opportunity guarantees":381,"guarantees num":210,"num returns":366,"returns act":492,"act fast":15,"fast unsubscribe":166,"selected ve":525,"minutes click":321,"won exclusive":683,"fast visit":167,"thanks ve":579,"pr cheers":408,"update quarterly":612,"action account":18,"approved earn":33,"today visit":591,"hi thanks":232,"week cheers":665,"scam":506,"scam free":512,"verify reply":638,"questions best":442,"hello thanks":221,"week talk":669,"following great":180,"touch let":597,"action earn":20,"today reply":588,"want account":646,"immediately num":258,"qualify":436,"vacation":628,"home congratulations":235,"congratulations qualify":117,"qualify free":437,"free vacation":200,"vacation click":629,"click claim":97,"claim unsubscribe":94,"regarding congratulations":457,"claim click":88,"sarah notes":500,"scam earn":510,"today num":587,"approved limited":35,"asked num":47,"action exclusive":21,"fast click":163,"click limited":99,"selected congratulations":521,"claim num":91,"want exclusive":650,"following thanks":188,"week let":667,"downtime let":145,"hi server":230,"home send":242,"hours num":248,"action cheap":19,"order limited":384,"scam limited":513,"scam cheap":507,"reminder reschedule":474,"reminder great":470,"asked limited":46,"team project":565,"selected click":520,"prize num":421,"scam click":508,"prize unsubscribe":423,"approved free":34,"following quarterly":184,"monday regards":337,"free account":192,"fee visit":173,"want cheap":647,"morning attached":340,"planning cheers":400,"day cheers":124,"team reschedule":567,"thanks thanks":578,"attached project":57,"selected limited":522,"home click":234,"planning regards":402,"reminder server":475,"morning review":345,"attached client":53,"team great":563,"scam lose":514,"attached ve":64,"pr regards":410,"won click":682,"urgent regards":623,"free send":199,"won limited":685,"approved ve":41,"minutes unsubscribe":324,"wednesday thanks":662,"home lose":240,"click click":98,"downtime cheers":144,"fast limited":164,"morning project":343,"regarding earn":458,"today unsubscribe":590,"regarding send":464,"reminder ve":477,"home exclusive":237,"claim limited":90,"message congratulations":317,"won account":681,"attached server":61,"approved send":40,"hours reply":249,"following notes":182,"missed thanks":332,"reminder attached":469,"thanks project":576,"message send":319,"sarah ve":505,"team ll":564,"urgent thanks":625,"free limited":196,"action limited":22,"meeting great":307,"touch cheers":596,"home package":241,"selected lose":523,"home free":239,"order unsubscribe":386,"message click":316,"meeting review":310,"missed cheers":328,"reminder thanks":476,"pr let":409,"monday cheers":335,"hello review":219,"hello ll":214,"following attached":179,"home earn":236,"sarah ll":499,"urgent talk":624,"asked reply":48,"hours unsubscribe":250,"won free":684,"offer free":375,"verify limited":636,"thanks ll":574,"morning thanks":346,"reminder ll":471,"approved lose":37,"want free":651,"fast reply":165,"touch talk":599,"attached great":55,"touch thanks":600,"offer limited":376,"verify unsubscribe":639,"regarding lose":462,"monday thanks":338,"questions let":444,"reminder notes":472,"missed best":327,"approved click":32,"missed talk":331,"pr thanks":412,"update ll":609,"action ve":25,"following review":186,"hi ll":226,"offer congratulations":372,"claim visit":95,"regarding exclusive":459,"hello reschedule":218,"won ve":688,"minutes visit":325,"scam congratulations":509,"claim reply":93,"prize click":419,"won package":687,"action package":23,"update ve":615,"order click":383,"sarah quarterly":502,"hello notes":215,"selected cheap":519,"immediately reply":259,"message earn":318,"hours click":246,"sarah review":503,"want send":655,"attached ll":56,"asked visit":50,"missed let":329,"thanks great":573,"click unsubscribe":104,"approved account":31,"want click":648,"touch regards":598,"fee reply":171,"won lose":686,"regarding account":455,"regarding package":463,"scam exclusive":511,"attached quarterly":58,"update project":611,"morning client":341,"reminder quarterly":473,"update notes":610,"update attached":608,"planning best":399,"attached attached":52,"team thanks":569,"hello client":213,"day let":125},"idf":[4.095733626934196,4.095733626934196,4.061832075258515,4.061832075258515,3.825443297194284,6.076735095800779,5.517119307865356,5.517119307865356,5.517119307865356,5.265804879584451,5.265804879584451,3.4376777661855207,4.029042252435524,3.9972935541209433,3.7494573902163624,4.24415363205247,4.572657699024505,4.029042252435524,5.517119307865356,6.076735095800779,6.076735095800779,6.36441716825256,5.853591544486569,6.36441716825256,5.853591544486569,6.076735095800779,3.9972935541209433,3.9972935541209433,4.418507019197247,4.418507019197247,3.2583368375297037,6.36441716825256,6.36441716825256,5.671269987692615,5.671269987692615,6.36441716825256,4.418507019197247,6.076735095800779,6.36441716825256,4.467297183366679,5.853591544486569,5.853591544486569,3.9366689323045088,3.9366689323045088,3.9972935541209433,5.160444363926624,6.076735095800779,5.517119307865356,5.853591544486569,5.383587915240834,6.36441716825256,2.790200622458764,6.36441716825256,6.076735095800779,4.24415363205247,6.36441716825256,6.076735095800779,6.076735095800779,6.36441716825256,5.517119307865356,4.204932918899188,5.671269987692615,5.853591544486569,4.029042252435524,5.853591544486569,2.7808982297964504,3.335895071875578,3.6128818552106114,3.87951051846456,3.87951051846456,3.4927375433685484,3.4927375433685484,4.095733626934196,4.095733626934196,4.029042252435524,4.029042252435524,3.9972935541209433,3.9972935541209433,3.9972935541209433,3.9972935541209433,3.9972935541209433,4.371987003562355,4.371987003562355,4.467297183366679,4.467297183366679,3.4376777661855207,3.4376777661855207,3.1455413433843598,6.076735095800779,4.167192590916341,5.671269987692615,6.36441716825256,4.1308249467454665,5.671269987692615,5.517119307865356,6.36441716825256,2.2319208400660835,4.284975626572725,5.853591544486569,5.383587915240834,4.1308249467454665,6.076735095800779,5.160444363926624,4.371987003562355,6.36441716825256,2.675537714138624,5.671269987692615,4.467297183366679,4.467297183366679,4.371987003562355,4.371987003562355,4.095733626934196,4.095733626934196,3.119224035066986,3.5712091588100434,3.9972935541209433,3.6128818552106114,4.284975626572725,4.095733626934196,3.9972935541209433,3.9972935541209433,3.186363337904615,4.24415363205247,5.671269987692615,5.853591544486569,6.36441716825256,5.265804879584451,5.853591544486569,3.825443297194284,3.825443297194284,4.095733626934196,4.095733626934196,4.371987003562355,4.371987003562355,3.87951051846456,3.87951051846456,4.467297183366679,4.467297183366679,4.167192590916341,4.167192590916341,4.24415363205247,4.24415363205247,4.095733626934196,6.36441716825256,5.383587915240834,6.076735095800779,5.383587915240834,5.265804879584451,4.095733626934196,4.095733626934196,4.24415363205247,4.24415363205247,3.9972935541209433,3.9972935541209433,3.2733747148942447,4.24415363205247,3.6128818552106114,4.095733626934196,4.095733626934196,4.095733626934196,4.095733626934196,3.402586446374251,4.24415363205247,5.265804879584451,6.076735095800779,5.671269987692615,5.671269987692615,6.36441716825256,4.371987003562355,5.517119307865356,5.671269987692615,6.076735095800779,5.853591544486569,6.076735095800779,4.24415363205247,4.24415363205247,3.9076813954312564,3.9076813954312564,3.41997818908612,6.076735095800779,5.383587915240834,5.383587915240834,5.853591544486569,5.265804879584451,5.853591544486569,6.076735095800779,5.671269987692615,5.671269987692615,6.076735095800779,5.517119307865356,3.5712091588100434,3.0810028222467882,6.36441716825256,6.36441716825256,6.36441716825256,3.9972935541209433,5.853591544486569,5.853591544486569,6.36441716825256,5.383587915240834,4.284975626572725,3.825443297194284,3.825443297194284,3.9972935541209433,3.9972935541209433,4.418507019197247,4.418507019197247,4.095733626934196,4.095733626934196,4.24415363205247,4.24415363205247,3.96652189545419,5.853591544486569,6.076735095800779,6.36441716825256,6.36441716825256,5.671269987692615,6.076735095800779,6.076735095800779,6.36441716825256,5.853591544486569,6.36441716825256,4.095733626934196,4.095733626934196,3.214534214871311,5.671269987692615,6.076735095800779,5.671269987692615,6.076735095800779,4.51859047775423,5.853591544486569,4.204932918899188,6.36441716825256,3.511785738339243,6.36441716825256,6.076735095800779,6.36441716825256,6.076735095800779,4.095733626934196,5.853591544486569,5.853591544486569,6.076735095800779,6.36441716825256,3.9366689323045088,3.9366689323045088,3.87951051846456,5.853591544486569,5.265804879584451,5.265804879584451,5.671269987692615,6.36441716825256,5.265804879584451,4.1308249467454665,4.1308249467454665,4.029042252435524,4.029042252435524,3.9972935541209433,5.383587915240834,5.265804879584451,6.076735095800779,5.517119307865356,5.517119307865356,4.061832075258515,4.061832075258515,4.24415363205247,4.24415363205247,3.96652189545419,3.96652189545419,3.4927375433685484,3.3686848946985695,3.9972935541209433,4.095733626934196,4.467297183366679,4.467297183366679,2.997121338266086,4.467297183366679,3.214534214871311,4.371987003562355,4.371987003562355,2.809069106763147,4.467297183366679,2.997121338266086,2.838056643636399,3.335895071875578,3.6128818552106114,4.1308249467454665,4.1308249467454665,3.3041463735609984,3.9972935541209433,3.96652189545419,4.418507019197247,4.418507019197247,3.214534214871311,4.029042252435524,3.5712091588100434,4.095733626934196,4.095733626934196,4.095733626934196,4.095733626934196,4.204932918899188,4.204932918899188,3.6563669671503503,4.467297183366679,4.467297183366679,3.119224035066986,6.076735095800779,4.095733626934196,5.853591544486569,5.517119307865356,6.076735095800779,6.076735095800779,6.076735095800779,6.36441716825256,4.061832075258515,4.284975626572725,6.076735095800779,5.853591544486569,6.076735095800779,6.076735095800779,5.671269987692615,4.418507019197247,5.853591544486569,5.517119307865356,6.076735095800779,5.853591544486569,6.076735095800779,4.467297183366679,6.36441716825256,6.076735095800779,6.36441716825256,5.671269987692615,6.076735095800779,5.853591544486569,3.531203824196344,5.383587915240834,6.36441716825256,3.9972935541209433,5.853591544486569,5.853591544486569,4.418507019197247,6.36441716825256,6.36441716825256,6.076735095800779,5.853591544486569,6.36441716825256,6.36441716825256,5.853591544486569,3.825443297194284,3.825443297194284,4.467297183366679,4.467297183366679,4.284975626572725,4.284975626572725,4.467297183366679,4.467297183366679,3.9076813954312564,3.9076813954312564,2.01629208525436,4.418507019197247,3.9972935541209433,3.87951051846456,4.284975626572725,2.888318478417287,3.402586446374251,4.029042252435524,3.9972935541209433,4.24415363205247,3.511785738339243,4.029042252435524,2.298243482997156,3.9972935541209433,6.076735095800779,6.36441716825256,3.402586446374251,3.5712091588100434,6.076735095800779,6.36441716825256,6.36441716825256,3.9972935541209433,3.9972935541209433,4.24415363205247,4.24415363205247,4.467297183366679,5.853591544486569,5.853591544486569,5.383587915240834,6.36441716825256,4.371987003562355,4.371987003562355,3.9972935541209433,3.9972935541209433,4.371987003562355,4.371987003562355,3.3041463735609984,3.9972935541209433,3.96652189545419,3.825443297194284,3.825443297194284,4.029042252435524,6.076735095800779,5.671269987692615,5.265804879584451,5.853591544486569,5.517119307865356,5.853591544486569,4.029042252435524,4.029042252435524,4.371987003562355,5.853591544486569,6.076735095800779,6.076735095800779,5.383587915240834,6.076735095800779,4.418507019197247,4.418507019197247,4.467297183366679,4.467297183366679,3.551006451492524,4.1308249467454665,5.853591544486569,5.671269987692615,5.853591544486569,5.383587915240834,5.853591544486569,6.076735095800779,3.96652189545419,3.96652189545419,3.41997818908612,3.825443297194284,4.467297183366679,4.467297183366679,4.467297183366679,4.371987003562355,4.371987003562355,4.029042252435524,4.029042252435524,4.284975626572725,4.284975626572725,4.32753524099152,4.32753524099152,2.8479089400794106,3.9972935541209433,5.671269987692615,5.853591544486569,6.36441716825256,6.076735095800779,3.551006451492524,5.383587915240834,4.095733626934196,4.095733626934196,3.9972935541209433,3.9972935541209433,3.87951051846456,3.87951051846456,3.9076813954312564,6.36441716825256,6.076735095800779,6.076735095800779,5.671269987692615,5.853591544486569,5.517119307865356,6.36441716825256,6.36441716825256,6.36441716825256,5.853591544486569,2.838056643636399,3.4927375433685484,3.551006451492524,4.204932918899188,5.853591544486569,6.36441716825256,6.36441716825256,6.36441716825256,6.36441716825256,6.36441716825256,6.36441716825256,6.076735095800779,6.076735095800779,3.5712091588100434,3.5712091588100434,4.32753524099152,4.32753524099152,4.371987003562355,4.371987003562355,4.095733626934196,4.095733626934196,4.029042252435524,4.029042252435524,3.531203824196344,4.061832075258515,4.371987003562355,4.24415363205247,4.24415363205247,3.2435217517445634,4.24415363205247,4.32753524099152,4.371987003562355,3.551006451492524,4.51859047775423,6.36441716825256,6.36441716825256,6.076735095800779,6.36441716825256,6.36441716825256,6.36441716825256,6.36441716825256,4.24415363205247,6.076735095800779,6.36441716825256,6.36441716825256,6.36441716825256,6.076735095800779,6.076735095800779,6.36441716825256,5.853591544486569,4.095733626934196,4.095733626934196,4.095733626934196,5.517119307865356,6.36441716825256,6.076735095800779,5.671269987692615,6.36441716825256,6.36441716825256,6.36441716825256,6.076735095800779,3.87951051846456,3.87951051846456,3.96652189545419,3.96652189545419,4.095733626934196,4.095733626934196,4.24415363205247,4.24415363205247,4.467297183366679,4.467297183366679,4.095733626934196,4.095733626934196,3.9366689323045088,3.9366689323045088,3.186363337904615,3.186363337904615,3.335895071875578,3.335895071875578,4.029042252435524,4.029042252435524,4.467297183366679,4.467297183366679,3.531203824196344,4.095733626934196,4.095733626934196,4.371987003562355,6.36441716825256,5.853591544486569,6.36441716825256,6.076735095800779,5.671269987692615,3.9972935541209433,3.9972935541209433,3.186363337904615,3.186363337904615,3.1455413433843598,5.853591544486569,6.076735095800779,6.36441716825256,6.36441716825256,5.853591544486569,6.36441716825256,5.853591544486569,6.36441716825256,2.86790960678608,5.853591544486569,5.517119307865356,6.36441716825256,5.853591544486569,3.6563669671503503,6.36441716825256,3.96652189545419,6.076735095800779,6.36441716825256,4.061832075258515,4.061832075258515,3.6128818552106114,3.6128818552106114,3.591828446012779,6.076735095800779,5.265804879584451,5.671269987692615,6.36441716825256,4.467297183366679,6.36441716825256,5.265804879584451,4.095733626934196,4.095733626934196,4.095733626934196,5.160444363926624,6.076735095800779,5.671269987692615,6.36441716825256,5.671269987692615,5.853591544486569,4.029042252435524,4.029042252435524,3.9972935541209433,3.9972935541209433,3.6128818552106114,3.6128818552106114,4.095733626934196,6.076735095800779,6.36441716825256,6.36441716825256,6.36441716825256,6.076735095800779,5.853591544486569,5.517119307865356,6.36441716825256,4.029042252435524,4.029042252435524,3.335895071875578,4.029042252435524,5.517119307865356,5.517119307865356,5.671269987692615,5.853591544486569,5.671269987692615,5.671269987692615,2.3272310198704083,3.531203824196344,4.284975626572725,4.284975626572725,3.725359838637302,4.418507019197247,4.371987003562355,3.3854920130149506,5.265804879584451,4.1308249467454665,5.671269987692615,5.671269987692615,5.853591544486569,6.36441716825256,5.383587915240834,3.531203824196344,3.531203824196344,3.9972935541209433,3.9972935541209433,3.9366689323045088,6.076735095800779,5.853591544486569,6.36441716825256,5.853591544486569,6.36441716825256,6.076735095800779,6.076735095800779,5.671269987692615,6.076735095800779,6.076735095800779,4.061832075258515,5.853591544486569,5.671269987692615,5.671269987692615,5.671269987692615,5.517119307865356,5.853591544486569,3.0322126580773565,5.671269987692615,5.517119307865356,4.095733626934196,5.383587915240834,5.671269987692615,5.383587915240834,6.36441716825256,4.204932918899188,4.029042252435524,4.029042252435524,4.029042252435524,4.029042252435524,4.095733626934196,4.095733626934196,3.87951051846456,3.87951051846456,4.095733626934196,6.36441716825256,6.076735095800779,5.671269987692615,6.36441716825256,5.853591544486569,6.36441716825256,6.076735095800779,6.076735095800779,4.204932918899188,4.204932918899188,3.5712091588100434,3.5712091588100434],"log_prob_ham":[-5.518457077733055,-5.518457077733055,-5.400049776394867,-5.400049776394867,-5.18373026399841,-7.177556425646744,-6.595622998602642,-6.651449862802151,-6.596979135730167,-6.365051982274145,-6.326240104256694,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.327049710730047,-5.327049710730047,-9.60791404054256,-9.60791404054256,-6.075110197029659,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.767483383291214,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-4.44473539090504,-7.507015058914957,-7.229055217522749,-5.608026317391861,-7.488695593677528,-7.14148258532159,-7.123964448584185,-7.584095650759659,-6.597953497654396,-5.531695931745768,-6.839152048715495,-6.931485623606893,-5.3726977320992715,-7.0582612937329055,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.0091890735197495,-5.0091890735197495,-5.518457077733055,-5.518457077733055,-5.3726977320992715,-5.3726977320992715,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.770576224753626,-5.770576224753626,-9.60791404054256,-9.60791404054256,-4.93901352674192,-4.93901352674192,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.767483383291214,-5.767483383291214,-5.770576224753626,-5.770576224753626,-5.433181027958508,-5.433181027958508,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-4.781908333164348,-5.608026317391861,-6.857372141751297,-6.987046677698006,-7.608874779988826,-6.471664587861007,-7.000346074522891,-5.18373026399841,-5.18373026399841,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.518128405616752,-5.518128405616752,-5.608026317391861,-5.608026317391861,-5.518457077733055,-7.654439754946528,-6.5731506929836305,-7.319680749424371,-6.56999049475505,-6.501277156361828,-9.60791404054256,-9.60791404054256,-5.608026317391861,-5.608026317391861,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.518457077733055,-5.518457077733055,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.608026317391861,-5.608026317391861,-9.60791404054256,-9.60791404054256,-4.953479875910386,-7.206913899884638,-6.520023453361656,-6.479794176767484,-6.98274380079762,-6.351984649423481,-6.983815420703582,-7.228126598658818,-6.866301194174466,-6.893938501635412,-7.230115544921187,-6.761238837947561,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.18373026399841,-5.18373026399841,-9.60791404054256,-9.60791404054256,-5.733980076019824,-5.733980076019824,-5.433181027958508,-5.433181027958508,-9.60791404054256,-9.60791404054256,-5.320651885502624,-6.935738273875471,-7.235084790485312,-7.46425742976082,-7.489606070484417,-6.706736398767998,-7.2136060385619265,-7.15599032148775,-7.548914320911577,-7.022151695423635,-7.498485321401557,-5.516580325272507,-5.516580325272507,-4.7966534740704585,-6.754720564795763,-7.170678304677449,-6.766678038288872,-7.155448060676203,-5.819163052181138,-7.033448836031038,-5.546346456639244,-7.479357955262586,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.400049776394867,-5.400049776394867,-9.60791404054256,-9.60791404054256,-5.3474309709562,-5.3474309709562,-5.0091890735197495,-5.708402300768057,-9.60791404054256,-5.516580325272507,-5.767483383291214,-5.767483383291214,-4.614717895122964,-5.728704572085345,-4.788199431490772,-5.770576224753626,-5.770576224753626,-4.49075909702336,-5.767483383291214,-4.614717895122964,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-4.8362172360711995,-5.327049710730047,-5.3474309709562,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.433181027958508,-5.433181027958508,-5.518457077733055,-5.518457077733055,-9.60791404054256,-9.60791404054256,-5.085306390824026,-9.60791404054256,-9.60791404054256,-4.634193849404177,-7.192159701263338,-5.433181027958508,-7.014162261076306,-6.61767721791122,-7.2273984206238895,-7.258234403425893,-7.313322850532886,-7.545902296128971,-5.400049776394867,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.728704572085345,-7.5246721254660445,-7.210592137716285,-7.589490904112603,-6.752110267025721,-7.212176253588775,-6.9358327383004115,-5.0028374696748745,-6.5592390451253335,-7.543048784250802,-5.327049710730047,-6.997846910720973,-7.009288412537397,-5.733980076019824,-7.553459492893084,-7.600017177878743,-7.207349809212904,-6.990342983380829,-7.550569092855392,-7.572887981808131,-7.026520870654142,-5.18373026399841,-5.18373026399841,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.728704572085345,-5.728704572085345,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.327049710730047,-5.327049710730047,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.527316722215228,-9.60791404054256,-5.3474309709562,-5.18373026399841,-5.18373026399841,-5.3726977320992715,-7.207359507448513,-6.760334986318847,-6.4189521678631545,-6.932746445268513,-6.635323498975068,-6.93876043731108,-9.60791404054256,-9.60791404054256,-5.770576224753626,-7.0556983373391935,-7.307754242880617,-7.281639258741433,-6.659184382342383,-7.301142995653484,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.018740643148974,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.3474309709562,-5.3474309709562,-4.911314037965395,-5.18373026399841,-5.767483383291214,-5.767483383291214,-5.767483383291214,-5.770576224753626,-5.770576224753626,-5.3726977320992715,-5.3726977320992715,-9.60791404054256,-9.60791404054256,-5.626491006773584,-5.626491006773584,-4.9082586458946285,-9.60791404054256,-6.796290737409842,-6.942329442722753,-7.643182905813898,-7.2035756100689055,-5.068444940418791,-6.510282885670182,-5.469895625889178,-5.469895625889178,-5.327049710730047,-5.327049710730047,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-4.5404171814142575,-5.0091890735197495,-5.018740643148974,-5.515589839091192,-6.914580160698716,-7.512573019596778,-7.482381448719199,-7.526421120635094,-7.485635661584772,-7.491599003818655,-7.589268199845969,-7.199041230228211,-7.295465479866594,-9.60791404054256,-9.60791404054256,-5.626491006773584,-5.626491006773584,-5.770576224753626,-5.770576224753626,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.537811844880934,-5.400049776394867,-9.60791404054256,-9.60791404054256,-9.60791404054256,-4.86247038722688,-5.608026317391861,-5.626491006773584,-5.770576224753626,-5.068444940418791,-5.819163052181138,-7.523947517978533,-7.534913895952612,-7.194730027083195,-7.54704043708312,-7.608148342985586,-7.625775835084153,-7.65648264457589,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.518457077733055,-5.518457077733055,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.3474309709562,-5.3474309709562,-5.518457077733055,-5.518457077733055,-5.608026317391861,-5.608026317391861,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-4.781908333164348,-4.781908333164348,-9.60791404054256,-9.60791404054256,-5.3726977320992715,-5.3726977320992715,-5.728704572085345,-5.728704572085345,-9.60791404054256,-5.433181027958508,-5.433181027958508,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-4.781908333164348,-4.781908333164348,-4.664156611057086,-6.983170884357837,-7.225675559302119,-7.508652865744677,-7.495761397251971,-6.97342427442714,-7.530811385290311,-7.0322293652711245,-7.539383161312768,-4.491212999080899,-6.928136702346543,-6.6596051445378945,-7.505086786884468,-6.901915739383173,-5.085306390824026,-7.479417370072927,-5.3474309709562,-7.21016188912213,-7.619857618008618,-5.400049776394867,-5.400049776394867,-9.60791404054256,-9.60791404054256,-5.941802004310292,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.728704572085345,-9.60791404054256,-9.60791404054256,-5.518457077733055,-5.518457077733055,-5.433181027958508,-6.334208237591646,-7.19858757095738,-6.810695189508699,-7.518622657171782,-6.760031050465976,-6.916996922367058,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.469895625889178,-7.230936525053666,-7.5502308898125845,-7.539525694399504,-7.514086702057214,-7.21728372673105,-6.972456128828129,-6.669410913047972,-7.6518225951726135,-5.3726977320992715,-5.3726977320992715,-5.505187779250653,-9.60791404054256,-6.622930322511969,-6.595429644808085,-6.812755428562953,-6.893135939917744,-6.749557344641627,-6.744937337859982,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.926896668743588,-9.60791404054256,-5.770576224753626,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-5.400049776394867,-6.996178447844068,-6.785451432388188,-6.794886238643091,-6.767120523689884,-6.609801819647514,-6.9371948346768475,-5.611688039325891,-6.825282368354598,-6.598191431129131,-9.60791404054256,-6.562928145974425,-6.777065667079876,-6.530216064975573,-7.558563587525168,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256,-9.60791404054256],"log_prob_spam":[-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.101109382277437,-5.705926737756991,-5.564494596068731,-5.437714252380607,-5.835311335971831,-6.115908346503926,-5.705926737756991,-6.9320588561815875,-7.5627260211070295,-7.5076841545297155,-7.829253420081938,-7.2906518433434195,-7.787767264907687,-7.249869129025093,-7.510491792564593,-9.71374016941358,-9.71374016941358,-5.981624044212546,-5.981624044212546,-5.363890409138558,-7.769335021118245,-7.669993935881015,-7.140792036146185,-7.140539374191321,-7.825263291111348,-5.981624044212546,-7.49411428581784,-7.719278304351431,-9.71374016941358,-7.224322276779067,-7.2624007959004775,-5.6206965855659785,-5.6206965855659785,-5.554299321056426,-6.375582999290583,-7.401012469179383,-7.01649298788206,-7.200919330528098,-6.723177691722944,-7.673444861384387,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-4.739838720917067,-5.131165287139403,-5.297936045567712,-5.50748437075984,-5.50748437075984,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.554299321056426,-5.554299321056426,-5.004768546351235,-5.6889420682419,-5.6889420682419,-9.71374016941358,-9.71374016941358,-6.047731899641931,-6.047731899641931,-9.71374016941358,-9.71374016941358,-4.914715426726563,-7.280356392544405,-5.6991204954045775,-7.011482690962253,-7.805428368173252,-5.663120190141845,-7.016994684780002,-6.839207857115125,-7.698128904214276,-4.221002322460354,-5.791298298378241,-7.170198986916566,-6.796322026169703,-5.663120190141845,-7.640352898563225,-6.612356695996766,-5.923150419512432,-7.709563123746909,-4.641470151344711,-6.993926052251706,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-4.932386248270726,-5.32341602948931,-5.564494596068731,-5.177083674105232,-5.791298298378241,-5.646635876658146,-5.6889420682419,-5.6889420682419,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.679704437344689,-5.679704437344689,-5.923150419512432,-5.923150419512432,-5.50748437075984,-5.50748437075984,-6.047731899641931,-6.047731899641931,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.7230103107543995,-5.7230103107543995,-9.71374016941358,-9.71374016941358,-5.6889420682419,-5.6889420682419,-4.99895851669111,-5.835311335971831,-5.297936045567712,-9.71374016941358,-9.71374016941358,-5.7230103107543995,-5.7230103107543995,-5.307600517185131,-5.835311335971831,-6.6220054051733825,-7.514757982241966,-7.119061327236768,-7.089700559670446,-7.748805890470131,-5.923150419512432,-6.896249460032245,-7.147378883456761,-7.467390251488583,-7.157810506873122,-7.39512743288716,-9.71374016941358,-9.71374016941358,-5.531161358882427,-5.531161358882427,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.32341602948931,-4.932941982058243,-7.768227849592371,-7.776622600976918,-7.72394258516453,-5.6889420682419,-7.138367464344266,-7.197169606760132,-7.695946757252605,-6.7000651276143985,-5.791298298378241,-9.71374016941358,-9.71374016941358,-5.6889420682419,-5.6889420682419,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.835311335971831,-5.835311335971831,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.282963301240334,-7.8241796978874785,-7.505126977496104,-7.936954597092944,-7.546135604055672,-5.7230103107543995,-7.343589383483423,-7.311943054036573,-7.567406464685253,-7.8896109023894105,-5.6206965855659785,-5.6206965855659785,-5.50748437075984,-7.114460823643914,-6.635380650284308,-6.776581463806319,-7.041140922120247,-7.70426736570912,-6.574782482282938,-5.663120190141845,-5.663120190141845,-5.705926737756991,-5.705926737756991,-5.564494596068731,-6.652161018116596,-6.730379665286382,-7.488780721689855,-6.8093444301921195,-6.781982894266757,-9.71374016941358,-9.71374016941358,-5.835311335971831,-5.835311335971831,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.856708653314533,-5.6889420682419,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-4.702272393755717,-5.131165287139403,-5.258957838654396,-5.663120190141845,-5.663120190141845,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.981624044212546,-5.981624044212546,-4.944976667908976,-5.662267712211983,-5.32341602948931,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.8879644804634665,-5.8879644804634665,-9.71374016941358,-6.047731899641931,-6.047731899641931,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.809146339289137,-7.3836729882915995,-7.153277960973891,-7.362803680859755,-7.426102436412406,-7.05824805503577,-5.981624044212546,-7.152561201288929,-6.935268061883559,-7.630943000085801,-7.246289801744222,-7.43092176693443,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-6.047731899641931,-6.047731899641931,-5.809146339289137,-5.809146339289137,-9.71374016941358,-9.71374016941358,-5.531161358882427,-5.531161358882427,-3.480567122613017,-5.981624044212546,-5.654545699873919,-5.50748437075984,-5.809146339289137,-4.06573228781957,-5.307600517185131,-5.662267712211983,-5.554299321056426,-5.835311335971831,-5.282963301240334,-5.662267712211983,-4.3522398145206935,-5.554299321056426,-7.508724514930861,-7.71716627377623,-5.307600517185131,-5.32341602948931,-7.4960425933776405,-7.829042609906114,-7.786985156688653,-9.71374016941358,-9.71374016941358,-5.835311335971831,-5.835311335971831,-6.047731899641931,-7.191756714563873,-7.256601180426642,-6.903615902725214,-7.799533499996945,-5.923150419512432,-5.923150419512432,-5.564494596068731,-5.564494596068731,-5.923150419512432,-5.923150419512432,-5.841370172774832,-5.654545699873919,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.662267712211983,-5.662267712211983,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.981624044212546,-5.981624044212546,-6.047731899641931,-6.047731899641931,-9.71374016941358,-5.663120190141845,-7.099064163317841,-6.977009071533669,-7.2827745779080395,-6.733238124462745,-7.137987600626892,-7.322351045867626,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.791298298378241,-5.791298298378241,-9.71374016941358,-9.71374016941358,-5.88704903882215,-5.554299321056426,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.50748437075984,-5.50748437075984,-5.531161358882427,-7.704381764818763,-7.35996188075512,-7.375721830801046,-7.057425761819779,-7.2218823109252686,-6.923778001376627,-7.622111053010841,-7.761819563576991,-7.7803338430247795,-7.214916452823878,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.32341602948931,-5.32341602948931,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.7230103107543995,-5.7230103107543995,-5.705926737756991,-5.705926737756991,-6.131366717829894,-9.71374016941358,-5.923150419512432,-5.835311335971831,-5.835311335971831,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.753675994788875,-7.459713745419168,-7.635504434089763,-7.699420397111599,-7.748079997561743,-7.4324299901914355,-7.478270574615973,-7.5852432040778766,-7.125246029110417,-9.71374016941358,-9.71374016941358,-5.646635876658146,-6.776383148998232,-7.78386743427359,-7.395152543979848,-7.0208675840821115,-7.689805504484339,-7.788117517936427,-7.665063047494151,-7.492089557060914,-5.50748437075984,-5.50748437075984,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-6.047731899641931,-6.047731899641931,-5.7230103107543995,-5.7230103107543995,-5.6206965855659785,-5.6206965855659785,-9.71374016941358,-9.71374016941358,-5.131165287139403,-5.131165287139403,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.214134072474474,-9.71374016941358,-9.71374016941358,-5.774823371770072,-7.590425173194316,-7.1161968068927575,-7.699170554747914,-7.476796054459367,-6.828771099014984,-5.564494596068731,-5.564494596068731,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.258957838654396,-5.258957838654396,-5.851704661533887,-7.431267281745233,-6.657459539477358,-7.237988675714188,-7.842002779698002,-9.71374016941358,-7.777345304772782,-6.631102912101016,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.662267712211983,-5.662267712211983,-5.564494596068731,-5.564494596068731,-5.297936045567712,-5.297936045567712,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.8909454262569305,-5.705926737756991,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-4.427795598465918,-5.214134072474474,-5.791298298378241,-5.791298298378241,-6.147817635845219,-5.981624044212546,-9.71374016941358,-5.172505914631983,-6.67943527257302,-5.663120190141845,-7.116187480435731,-7.212525759627152,-7.301414782457362,-7.815461714861925,-6.81066968832372,-5.214134072474474,-5.214134072474474,-5.6889420682419,-5.6889420682419,-5.6206965855659785,-7.450009395269379,-7.313490016831368,-7.734948300189376,-7.225959037953647,-7.8054107426580455,-7.546602545763607,-7.421281525151093,-7.142698633151938,-7.510956915545835,-7.402283143330036,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.427914208223693,-9.71374016941358,-9.71374016941358,-5.7230103107543995,-9.71374016941358,-9.71374016941358,-9.71374016941358,-9.71374016941358,-5.8879644804634665,-5.662267712211983,-5.662267712211983,-5.662267712211983,-5.662267712211983,-5.679704437344689,-5.679704437344689,-5.50748437075984,-5.50748437075984,-5.679704437344689,-7.676625942745167,-7.4473508327842035,-7.0694362288623624,-7.792259072890299,-7.175016511460849,-7.75432000358868,-7.442820913253887,-7.429824733586349,-5.8879644804634665,-5.8879644804634665,-5.32341602948931,-5.32341602948931],"class_log_prior":[-0.6931471805599454,-0.6931471805599454]}</script>
+<script>
+(function () {
+  const model = JSON.parse(document.getElementById('model-data').textContent);
+
+  function cleanText(text) {
+    text = text.toLowerCase();
+    text = text.replace(/https?:\/\/\S+|www\.\S+/g, ' URL ');
+    text = text.replace(/\b\d+\b/g, ' NUM ');
+    text = text.replace(/[!-\/:-@\[-`{-~]/g, ' ');
+    text = text.replace(/\s+/g, ' ').trim();
+    return text;
+  }
+
+  function tokenize(text) {
+    const cleaned = cleanText(text).toLowerCase();
+    const tokens = cleaned.match(/[a-z0-9]{2,}/g) || [];
+    const bigrams = [];
+    for (let i = 0; i < tokens.length - 1; i++) {
+      bigrams.push(tokens[i] + ' ' + tokens[i + 1]);
+    }
+    return tokens.concat(bigrams);
+  }
+
+  function classify(text) {
+    const ngrams = tokenize(text);
+    const counts = {};
+    for (const g of ngrams) {
+      if (Object.prototype.hasOwnProperty.call(model.vocab, g)) {
+        counts[g] = (counts[g] || 0) + 1;
+      }
+    }
+    const raw = {};
+    let normSq = 0;
+    for (const term in counts) {
+      const idx = model.vocab[term];
+      const val = counts[term] * model.idf[idx];
+      raw[term] = val;
+      normSq += val * val;
+    }
+    const norm = Math.sqrt(normSq) || 1;
+
+    let scoreHam = model.class_log_prior[0];
+    let scoreSpam = model.class_log_prior[1];
+    const contributions = [];
+
+    for (const term in raw) {
+      const idx = model.vocab[term];
+      const x = raw[term] / norm;
+      const hamContrib = x * model.log_prob_ham[idx];
+      const spamContrib = x * model.log_prob_spam[idx];
+      scoreHam += hamContrib;
+      scoreSpam += spamContrib;
+      contributions.push({
+        term,
+        diff: model.log_prob_spam[idx] - model.log_prob_ham[idx],
+        weight: Math.abs(spamContrib - hamContrib),
+      });
+    }
+
+    const diff = scoreSpam - scoreHam;
+    const pSpam = 1 / (1 + Math.exp(-diff));
+
+    return {
+      label: pSpam > 0.5 ? 'spam' : 'ham',
+      pSpam,
+      contributions,
+    };
+  }
+
+  function escapeRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function annotate(text, contributions) {
+    // Only highlight single, alphabetic, meaningful unigrams
+    const candidates = contributions
+      .filter((c) => /^[a-z]{3,}$/.test(c.term) && c.term !== 'num' && c.term !== 'url')
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 10);
+
+    if (candidates.length === 0) return escapeHtml(text);
+
+    // Build a single regex matching any candidate term as a whole word
+    const pattern = new RegExp(
+      '\\b(' + candidates.map((c) => escapeRegex(c.term)).join('|') + ')\\b',
+      'gi'
+    );
+    const byTerm = {};
+    candidates.forEach((c) => (byTerm[c.term] = c.diff));
+
+    let out = '';
+    let lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      out += escapeHtml(text.slice(lastIndex, match.index));
+      const matched = match[0];
+      const key = matched.toLowerCase();
+      const diff = byTerm[key];
+      const color = diff > 0 ? 'var(--spam)' : 'var(--ham)';
+      out += `<mark style="--mark-color:${color}">${escapeHtml(matched)}</mark>`;
+      lastIndex = match.index + matched.length;
+    }
+    out += escapeHtml(text.slice(lastIndex));
+    return out;
+  }
+
+  // ---- wire up UI ----
+  const input = document.getElementById('input');
+  const charcount = document.getElementById('charcount');
+  const scanBtn = document.getElementById('scanBtn');
+  const result = document.getElementById('result');
+  const stamp = document.getElementById('stamp');
+  const meterFill = document.getElementById('meterFill');
+  const meterLabel = document.getElementById('meterLabel');
+  const annotated = document.getElementById('annotated');
+
+  input.addEventListener('input', () => {
+    charcount.textContent = input.value.length + ' characters';
+  });
+
+  function runScan() {
+    const text = input.value.trim();
+    if (!text) {
+      input.focus();
+      return;
+    }
+    const r = classify(text);
+    result.classList.add('show');
+
+    stamp.textContent = r.label === 'spam' ? 'SPAM' : 'HAM';
+    stamp.className = 'stamp ' + r.label;
+
+    const pct = Math.round(r.pSpam * 100);
+    meterFill.style.width = pct + '%';
+    meterFill.style.background = r.label === 'spam' ? 'var(--spam)' : 'var(--ham)';
+    meterLabel.textContent = pct + '% spam probability';
+
+    annotated.innerHTML = annotate(text, r.contributions);
+    result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  scanBtn.addEventListener('click', runScan);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runScan();
+  });
+
+  const samples = {
+    scam: "CONGRATULATIONS! You have been selected to claim a free $1,000,000 prize. Click here now to verify your identity before this exclusive offer expires: http://claim-your-prize.win/now",
+    coworker: "Hi team, quick update on the Q3 report — I've attached the latest draft. Could you review it and let me know your thoughts by Friday? Thanks, Sam",
+    promo: "Your order has shipped! Track your package here. Thanks for shopping with us — as a returning customer, enjoy 15% off your next order with code WELCOME15.",
+  };
+
+  document.querySelectorAll('.chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      input.value = samples[btn.dataset.sample];
+      charcount.textContent = input.value.length + ' characters';
+      runScan();
+    });
+  });
+
+  // ---- populate evidence tags from real model weights ----
+  const diffs = Object.keys(model.vocab)
+    .filter((t) => /^[a-z]+$/.test(t)) // unigrams only, alphabetic
+    .map((t) => ({
+      term: t,
+      diff: model.log_prob_spam[model.vocab[t]] - model.log_prob_ham[model.vocab[t]],
+    }))
+    .sort((a, b) => b.diff - a.diff);
+
+  const topSpam = diffs.slice(0, 12);
+  const topHam = diffs.slice(-12).reverse();
+
+  const spamTags = document.getElementById('spamTags');
+  const hamTags = document.getElementById('hamTags');
+  topSpam.forEach((d) => {
+    const el = document.createElement('span');
+    el.className = 'tag';
+    el.textContent = d.term;
+    spamTags.appendChild(el);
+  });
+  topHam.forEach((d) => {
+    const el = document.createElement('span');
+    el.className = 'tag';
+    el.textContent = d.term;
+    hamTags.appendChild(el);
+  });
+})();
+
+</script>
+</body>
+</html>
