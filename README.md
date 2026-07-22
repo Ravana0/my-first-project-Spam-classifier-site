@@ -1,2 +1,1 @@
-# 1st-project-Spam-email classifier-site
-Spam Email Classifier Train a model to detect and filter spam emails based on email content. Use techniques like Naive Bayes or Support Vector Machines (SVM) for classification.
+This project uses Machine Learning techniques to classify emails as Spam or Ham (Not Spam). The model analyzes email content and predicts whether an email is malicious or legitimate.
